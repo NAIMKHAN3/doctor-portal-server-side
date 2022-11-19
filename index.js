@@ -1,12 +1,29 @@
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const jwt = require('jsonwebtoken')
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
 const app = express();
 const port = process.env.PORT | 5000;
 
 app.use(cors());
 app.use(express.json());
+
+function verifyJWT(req, res, next) {
+    const authHeader = req.headers?.authorization;
+    if (!authHeader) {
+        return res.status(401).send({ message: 'unauthorized access' })
+    }
+    const token = authHeader.split(' ')[1]
+    jwt.verify(token, process.env.ACCESS_TOKEN, function (err, decoded) {
+        if (err) {
+            return res.status(403).send({ message: 'unauthorized access' })
+        }
+        req.decoded = decoded;
+    })
+
+    next();
+}
 
 app.get('/', (req, res) => {
     res.send({ status: true, message: "doctor portal server is runnig" });
@@ -41,9 +58,15 @@ async function run() {
         app.post('/users', async (req, res) => {
             try {
                 const user = req.body;
-                console.log(user)
-                const result = await usersCollection.insertOne(user);
-                res.send(result)
+                const email = user.email;
+                const oldUser = usersCollection.find({ email: email }).toArray();
+                if (!oldUser) {
+                    const result = await usersCollection.insertOne(user);
+                    res.send(result)
+                }
+                else {
+                    res.send({ message: "User already added a mongodb database" })
+                }
             }
             catch {
                 res.send({ status: false, message: 'cold not data' })
@@ -59,10 +82,27 @@ async function run() {
                 res.send({ status: false, messege: 'conld not data' })
             }
         })
+        app.get('/jwt', async (req, res) => {
+            const email = req.query.email;
+            const user = await usersCollection.findOne({ email: email })
+            console.log(user)
+            if (user) {
+                const token = jwt.sign({ email }, process.env.ACCESS_TOKEN, { expiresIn: '7d' })
+                res.send({ token })
+            }
+            else {
+                res.status(403).send({ token: '' })
+            }
+        })
 
-        app.get('/myappoinment', async (req, res) => {
+        app.get('/myappoinment', verifyJWT, async (req, res) => {
             try {
+                console.log(req.decoded)
+                const decodedEmail = req.decoded?.email;
                 const userEmail = req.query.email;
+                if (userEmail !== decodedEmail) {
+                    return res.status(403).send({ message: 'forbidden access' })
+                }
                 const result = await bookingCollection.find({ email: userEmail }).toArray();
                 res.send(result)
             }
@@ -87,6 +127,33 @@ async function run() {
             catch {
                 res.send({ status: false, message: 'coldnt data found' })
             }
+        })
+        app.get('/user/admin/:email', async (req, res) => {
+            const email = req.params.email;
+            const user = await usersCollection.findOne({ email: email });
+            res.send({ isAdmin: user?.role === 'admin' })
+        })
+        app.put('/user/admin/:id', verifyJWT, async (req, res) => {
+            const decodedEmail = req.decoded.email;
+            const user = await usersCollection.findOne({ email: decodedEmail });
+            if (user.role !== 'admin') {
+                res.status(403).send({ message: 'forbidden access' })
+            }
+            const id = req.params.id;
+            const filter = { _id: ObjectId(id) }
+            const options = { upsert: true }
+            const upDoc = {
+                $set: {
+                    role: 'admin'
+                }
+            }
+            const result = await usersCollection.updateOne(filter, upDoc, options);
+            res.send(result)
+        })
+        app.delete('/user/:email', async (req, res) => {
+            const email = req.params.email;
+            const result = await usersCollection.deleteOne({ email: email })
+            res.send(result)
         })
 
     }
