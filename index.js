@@ -38,6 +38,7 @@ const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology:
 const appoinmentOption = client.db('doctor-portal').collection('appoinment-option')
 const bookingCollection = client.db('doctor-portal').collection('booking')
 const usersCollection = client.db('doctor-portal').collection('users')
+const doctorCollection = client.db('doctor-portal').collection('doctor')
 async function run() {
     try {
         app.post('/booking', async (req, res) => {
@@ -85,7 +86,6 @@ async function run() {
         app.get('/jwt', async (req, res) => {
             const email = req.query.email;
             const user = await usersCollection.findOne({ email: email })
-            console.log(user)
             if (user) {
                 const token = jwt.sign({ email }, process.env.ACCESS_TOKEN, { expiresIn: '7d' })
                 res.send({ token })
@@ -97,7 +97,6 @@ async function run() {
 
         app.get('/myappoinment', verifyJWT, async (req, res) => {
             try {
-                console.log(req.decoded)
                 const decodedEmail = req.decoded?.email;
                 const userEmail = req.query.email;
                 if (userEmail !== decodedEmail) {
@@ -155,6 +154,26 @@ async function run() {
             const result = await usersCollection.deleteOne({ email: email })
             res.send(result)
         })
+
+        app.get('/adddoctor/title', async (req, res) => {
+            const result = await appoinmentOption.find({}).project({ name: 1 }).toArray();
+            res.send(result)
+        })
+        app.post('/adddoctor', verifyJWT, async (req, res) => {
+            const body = req.body;
+            const result = await doctorCollection.insertOne(body);
+            res.send(result)
+        })
+        app.get('/doctors', verifyJWT, async (req, res) => {
+            const result = await doctorCollection.find({}).toArray();
+            res.send(result)
+        })
+        app.delete('/doctors/:id', verifyJWT, async (req, res) => {
+            const id = req.params.id
+            const result = await doctorCollection.deleteOne({ _id: ObjectId(id) });
+            res.send(result)
+        })
+
 
     }
     finally {
