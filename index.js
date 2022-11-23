@@ -64,7 +64,7 @@ async function run() {
             try {
                 const user = req.body;
                 const email = user.email;
-                const oldUser = usersCollection.find({ email: email }).toArray();
+                const oldUser = await usersCollection.findOne({ email: email });
                 if (!oldUser) {
                     const result = await usersCollection.insertOne(user);
                     res.send(result)
@@ -141,6 +141,9 @@ async function run() {
                     return res.status(403).send({ message: 'forbidden access' })
                 }
                 const result = await bookingCollection.find({ email: userEmail }).toArray();
+                if (!result) {
+                    return res.send({ status: false, messege: "Your Appoinment is empty" })
+                }
                 res.send(result)
             }
             catch {
